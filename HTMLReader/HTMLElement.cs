@@ -16,7 +16,7 @@ namespace HTMLReader {
         public string Id { get; set; }
         public string ClassName { get; set; }
         public string Tag { get; set; }
-        public List<HTMLAttribute> Attributes { get; }
+        public List<HTMLAttribute> Attributes { get; set; }
         public HTMLElement() : this(String.Empty, String.Empty, 
             String.Empty, String.Empty, 
             String.Empty, null, null, null) {}

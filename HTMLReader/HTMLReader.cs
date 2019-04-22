@@ -4,6 +4,7 @@ using System.Text;
 using System.Net;
 using System.Net.Http;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace HTMLReader {
     class HTMLReader {
@@ -19,7 +20,7 @@ namespace HTMLReader {
         private bool insideTagName = false;
         private bool insideAttribute = false;
         private bool insideId = false;
-        private bool insideClassName = false;
+        private bool insideClassName = false;   
 
         private StringBuilder tagName;
         private StringBuilder className;
@@ -31,20 +32,16 @@ namespace HTMLReader {
         private List<HTMLElement> elementsCached;
         private Stack<HTMLElement> elementsQueued;
 
-        public async void DownloadAsync(string url) {
+        public async Task<string> DownloadAsync(string url) {
+            string html;
             using (HttpClient client = new HttpClient()) {
-                using (HttpResponseMessage res = client.GetAsync(url).Result) {
+                using (HttpResponseMessage res = await client.GetAsync(url)) {
                     using (HttpContent content = res.Content) {
-                        Stream stream = await content.ReadAsStreamAsync();
-                        using (StreamReader reader = new StreamReader(stream)) {
-                            string line;
-                            while ((line = reader.ReadLine()) != null) {
-                                _GenerateTags(line);
-                            }
-                        }
+                        html = await content.ReadAsStringAsync();
                     }
                 }
             }
+            return html;
         }
 
         private void _GenerateTags(string line) {
@@ -64,43 +61,78 @@ namespace HTMLReader {
                         elementsCached.Add(tmp);
                         insideTags = false;
                         i += tagName.Length + 1;
-                    } 
-                    else if (line[i] == '<' && !insideDoubleQuotes && !   insideSingleQuotes) {
+                    } else if (line[i] == '<' && line[i+1] != '/') {
                         insideTags = true;
                         insideTagName = true;
-                        if (elementsQueued.Count != 0) {
-
-                        }
                         HTMLElement e = new HTMLElement();
+                        if (elementsQueued.Count != 0) {
+                            e.Parent = elementsQueued.Peek();
+                        }
                         elementsQueued.Push(e);
-                        continue;
-                    } else if (line[i] == '"') {
-                        if (insideDoubleQuotes) {
-                            insideDoubleQuotes = false;
-                            if (attributes.Count != 0) {
-                                attributes[attributes.Count - 1].Value = attributeValue.ToString();
-                            }
-                        }
-                        else if ()
+                        i += GetStringUntilDelimeter(ref tagName, line, i + 1, ' ');
+                        i += GetAttributes(line, i + 1, ref e);
+                        e.Attributes = attributes;
+                        attributes.Clear();
                     }
-                    if (insideTagName) {
-                        if (line[i] == ' ') {
-                            insideTagName = false;
-                            insideAttribute = true;
-                            continue;
-                        } else {
-                            tagName.Append(line[i]);
-                        }
-                    } else if (insideAttribute)
 
                 }
-                
-
             }
         }
 
-     
+        private int GetStringUntilDelimeter(ref StringBuilder sb, string rawHtml, int currentIdx, char delimeter) {
+            int i;
+            for (i = currentIdx; i < rawHtml.Length; i++) {
+                if (rawHtml[i] == delimeter) { 
+                    return i;
+                } else {
+                    sb.Append(rawHtml[i]);
+                }
+            }
+            return i;
+        }
 
+        private int GetAttributes(string rawHtml, int currentIdx, ref HTMLElement e) {
+            int i = currentIdx;
+            while (i < rawHtml.Length && rawHtml[i] != '>') {
+                StringBuilder attrName = new StringBuilder();
+                StringBuilder attrVal = new StringBuilder();
 
+                i += GetAttributeName(ref attrName, rawHtml, i);
+                for (int j = i + 1; j < rawHtml.Length; j++) {
+                    if (rawHtml[j] == '"') {
+                        insideDoubleQuotes = true;
+                        i += GetStringUntilDelimeter(ref attrVal, rawHtml, j + 1, '"');
+                        break;
+                    } else if (rawHtml[j] == '\'') {
+                        insideSingleQuotes = true;
+                        i += GetStringUntilDelimeter(ref attrVal, rawHtml, j + 1, '\'');
+                        break;
+                    }
+                }
+
+                HTMLAttribute attr = new HTMLAttribute(attrName.ToString(), attrVal.ToString());
+                if (attrName.ToString().TrimStart() == "class") {
+                    e.ClassName = attrVal.ToString();
+                } else if (attrName.ToString().TrimStart() == "id") {
+                    e.Id = attrVal.ToString();
+                }
+
+                attributes.Add(attr);
+                i++; 
+            }
+            return i - 1;
+        }
+        private int GetAttributeName(ref StringBuilder sb, string rawHtml, int currentIdx) {
+            int i;
+            for (i = currentIdx; i < rawHtml.Length; i++) {
+                if (rawHtml[i] == '=') {
+                    return i;
+                } else {
+                    sb.Append(rawHtml[i]);
+                }
+            }
+           
+            return i;
+        }
     }
 }
